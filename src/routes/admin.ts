@@ -6,17 +6,24 @@ import { setMyCommands, setWebhook } from '../telegram/api';
 export const admin = new Hono<{ Bindings: Env }>();
 
 admin.use('*', async (c, next) => {
-  const expected = c.env.ADMIN_BASIC_AUTH;
-  if (!expected) return c.text('admin disabled', 503);
-  // atob throws InvalidCharacterError on non-base64 input. Treat that as a
-  // configuration problem (503), not an internal error (500), so an operator
-  // who pasted the raw "user:pass" instead of base64 sees a useful signal.
-  let decoded: string;
-  try {
-    decoded = atob(expected);
-  } catch {
-    return c.text('admin misconfigured: ADMIN_BASIC_AUTH is not valid base64', 503);
+const expected = c.env.ADMIN_BASIC_AUTH?.trim();
+if (!expected) return c.text('admin disabled', 503);
+  
+  // Prefer a raw "user:pass" secret. Keep Base64 support for compatibility
+  // with existing deployments.
+  let decoded = expected;
+  
+  if (!expected.includes(':')) {
+    try {
+      decoded = atob(expected);
+    } catch {
+      return c.text(
+        'admin misconfigured: expected "user:pass" or base64 of "user:pass"',
+        503,
+      );
+    }
   }
+  
   const idx = decoded.indexOf(':');
   if (idx < 0) return c.text('admin misconfigured: expected base64 of "user:pass"', 503);
   const username = decoded.slice(0, idx);
