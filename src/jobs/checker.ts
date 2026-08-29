@@ -101,7 +101,20 @@ async function checkBoard(env: Env, board: string): Promise<void> {
 }
 
 async function loadBoards(env: Env): Promise<{ name: string }[]> {
-  const res = await env.DB.prepare(`SELECT name FROM boards`).all<{ name: string }>();
+  const res = await env.DB.prepare(
+    `SELECT name
+     FROM boards
+     WHERE EXISTS (
+       SELECT 1 FROM keyword_subs
+       WHERE keyword_subs.board = boards.name
+     )
+     OR EXISTS (
+       SELECT 1 FROM author_subs
+       WHERE author_subs.board = boards.name
+     )
+     ORDER BY name`,
+  ).all<{ name: string }>();
+
   return res.results;
 }
 
