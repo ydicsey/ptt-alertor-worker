@@ -1,6 +1,6 @@
 # ptt-alertor-worker
 
-Cloudflare Workers rewrite of [ptt-alertor](https://github.com/Ptt-Alertor/ptt-alertor) — crawls PTT for new articles and pushes notifications via Telegram. LINE / Messenger / Mail are stubbed (single-function extension points). 
+Cloudflare Workers rewrite of [ptt-alertor](https://github.com/Ptt-Alertor/ptt-alertor) — crawls PTT for new articles and pushes notifications via Telegram. LINE / Messenger / Mail are stubbed (single-function extension points).
 
 ## Architecture
 
