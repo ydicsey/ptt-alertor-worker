@@ -21,7 +21,7 @@ Cron Trigger (every minute)
 
 Webhooks
   POST /webhooks/telegram   parser → apply → D1
-Admin (basic auth, base64 in ADMIN_BASIC_AUTH)
+Admin (basic auth via ADMIN_BASIC_AUTH)
   GET    /admin/users
   GET    /admin/boards
   POST   /admin/boards
