@@ -420,32 +420,89 @@ export async function formatList(
      FROM keyword_subs
      WHERE user_id = ?
      ORDER BY board, keyword`,
-  ).bind(userId).all<{ board: string; keyword: string }>();
+  )
+    .bind(userId)
+    .all<{
+      board: string;
+      keyword: string;
+    }>();
 
   const aus = await env.DB.prepare(
     `SELECT board, author
      FROM author_subs
      WHERE user_id = ?
      ORDER BY board, author`,
-  ).bind(userId).all<{ board: string; author: string }>();
+  )
+    .bind(userId)
+    .all<{
+      board: string;
+      author: string;
+    }>();
 
-  if (kws.results.length === 0 && aus.results.length === 0) {
-    return '（沒有訂閱）';
+  if (
+    kws.results.length === 0 &&
+    aus.results.length === 0
+  ) {
+    return '📋 目前沒有訂閱。';
   }
 
-  const lines: string[] = [];
+  const lines: string[] = [
+    '📋 我的訂閱',
+  ];
 
-  if (kws.results.length) {
-    lines.push('關鍵字:');
-    for (const r of kws.results) {
-      lines.push(`  ${r.board}: ${r.keyword}`);
+  if (kws.results.length > 0) {
+    const grouped = new Map<
+      string,
+      string[]
+    >();
+
+    for (const row of kws.results) {
+      const items =
+        grouped.get(row.board) ?? [];
+
+      items.push(row.keyword);
+      grouped.set(row.board, items);
+    }
+
+    lines.push(
+      '',
+      '🔎 關鍵字',
+    );
+
+    for (const [board, items] of grouped) {
+      lines.push(board);
+
+      for (const item of items) {
+        lines.push(`  • ${item}`);
+      }
     }
   }
 
-  if (aus.results.length) {
-    lines.push('作者:');
-    for (const r of aus.results) {
-      lines.push(`  ${r.board}: ${r.author}`);
+  if (aus.results.length > 0) {
+    const grouped = new Map<
+      string,
+      string[]
+    >();
+
+    for (const row of aus.results) {
+      const items =
+        grouped.get(row.board) ?? [];
+
+      items.push(row.author);
+      grouped.set(row.board, items);
+    }
+
+    lines.push(
+      '',
+      '👤 作者',
+    );
+
+    for (const [board, items] of grouped) {
+      lines.push(board);
+
+      for (const item of items) {
+        lines.push(`  • ${item}`);
+      }
     }
   }
 
