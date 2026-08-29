@@ -20,7 +20,7 @@ Cron Trigger (every minute)
                               └─ mail      (stub)
 
 Webhooks
-  POST /webhooks/telegram/:secret   parser → apply → D1
+  POST /webhooks/telegram   parser → apply → D1
 Admin (basic auth, base64 in ADMIN_BASIC_AUTH)
   GET    /admin/users
   GET    /admin/boards
@@ -52,11 +52,13 @@ pnpm db:migrate:remote           # for production
 
 wrangler queues create ptt-article-events
 wrangler queues create ptt-dispatch
+wrangler queues create ptt-ui-cleanup
 wrangler queues create ptt-dlq
 
 wrangler secret put TELEGRAM_BOT_TOKEN
 wrangler secret put TELEGRAM_WEBHOOK_SECRET
 wrangler secret put ADMIN_BASIC_AUTH    # echo -n "user:pass" | base64
+wrangler secret put TELEGRAM_ALLOWED_USER_IDS
 
 pnpm dev
 pnpm deploy
@@ -107,6 +109,8 @@ Authors are exact IDs, so spaces there just separate multiple IDs (no AND).
 
 The original Chinese free-text grammar still works (`新增 Stock 關鍵字 台積電,聯電`, `刪除 Stock 作者 someuser`, `清單`, `help`).
 
+Keyword matching is case-insensitive. Author IDs remain exact/case-sensitive matches.
+
 ## Tests
 
 ```
@@ -117,7 +121,9 @@ pnpm typecheck
 ## Caveats
 
 - Workers Free has a 30s wall-time cap on scheduled events. Many boards x per-board delay can exceed it; bump to Workers Paid or shard boards across multiple cron expressions.
-- Queues require the Workers Paid plan ($5/mo).
+- Cloudflare Queues are available on Workers Free. The Free plan includes 10,000 queue operations per day and up to 24-hour message retention.
+- Workers Free allows 10 ms CPU time per Cron Trigger and up to 15 minutes wall-clock duration.
+- Workers Free allows 50 external subrequests per invocation, so keep the number of actively monitored boards modest.
 - Push count and comment trackers from the Go version are not yet ported. Extend `runChecker` to enqueue new event kinds and add handlers in `matcher.ts`.
 - Cloudflare may rate-limit outbound `fetch` on the Free plan.
 
