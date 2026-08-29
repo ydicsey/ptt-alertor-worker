@@ -57,7 +57,7 @@ wrangler queues create ptt-dlq
 
 wrangler secret put TELEGRAM_BOT_TOKEN
 wrangler secret put TELEGRAM_WEBHOOK_SECRET
-wrangler secret put ADMIN_BASIC_AUTH    # echo -n "user:pass" | base64
+wrangler secret put ADMIN_BASIC_AUTH    # recommended: raw "user:pass"; base64 also supported
 wrangler secret put TELEGRAM_ALLOWED_USER_IDS
 
 pnpm dev
@@ -120,7 +120,6 @@ pnpm typecheck
 
 ## Caveats
 
-- Workers Free has a 30s wall-time cap on scheduled events. Many boards x per-board delay can exceed it; bump to Workers Paid or shard boards across multiple cron expressions.
 - Cloudflare Queues are available on Workers Free. The Free plan includes 10,000 queue operations per day and up to 24-hour message retention.
 - Workers Free allows 10 ms CPU time per Cron Trigger and up to 15 minutes wall-clock duration.
 - Workers Free allows 50 external subrequests per invocation, so keep the number of actively monitored boards modest.
