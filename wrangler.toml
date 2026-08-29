@@ -2,7 +2,6 @@ name = "ptt-alertor"
 main = "src/index.ts"
 compatibility_date = "2025-01-15"
 compatibility_flags = ["nodejs_compat"]
-account_id = "bb0939ef962c26798e65a7ad35baa0ac"
 
 # every minute — runs the PTT board sweep
 [triggers]
@@ -11,7 +10,7 @@ crons = ["* * * * *"]
 [[d1_databases]]
 binding = "DB"
 database_name = "ptt-alertor"
-database_id = "854bc184-761f-4228-9312-f9526153dfbb"
+database_id = "42eefeb4-f956-4a7a-aeeb-66c2038717af"
 
 # article events: produced by the cron checker, consumed by the matcher
 [[queues.producers]]
@@ -44,6 +43,7 @@ USER_AGENT = "Mozilla/5.0 (compatible; PttAlertor/2.0; +https://github.com/Ptt-A
 # Secrets (set with: wrangler secret put <NAME>)
 #   TELEGRAM_BOT_TOKEN
 #   TELEGRAM_WEBHOOK_SECRET
+#   TELEGRAM_ALLOWED_USER_IDS
 #   ADMIN_BASIC_AUTH        (base64 of "user:pass")
 #   LINE_CHANNEL_TOKEN      (optional)
 #   MESSENGER_PAGE_TOKEN    (optional)
