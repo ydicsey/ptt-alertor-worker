@@ -10,10 +10,33 @@ export async function sendTelegram(env: Env, evt: DispatchEvent): Promise<void> 
 
 function formatMessage(evt: DispatchEvent): string {
   const { payload } = evt;
-  const reason = payload.matchReason.startsWith('keyword:')
-    ? `關鍵字「${payload.matchReason.slice(8)}」`
-    : `作者「${payload.matchReason.slice(7)}」`;
-  return `<b>[${esc(payload.board)}]</b> ${reason}\n${esc(payload.title)}\n— ${esc(payload.author)}\n${payload.url}`;
+
+  const reasons = payload.matchReasons
+    .map(formatReason)
+    .map((reason) => `• ${reason}`)
+    .join('\n');
+
+  return [
+    `<b>[${esc(payload.board)}]</b>`,
+    `符合：`,
+    reasons,
+    '',
+    esc(payload.title),
+    `— ${esc(payload.author)}`,
+    esc(payload.url),
+  ].join('\n');
+}
+
+function formatReason(reason: string): string {
+  if (reason.startsWith('keyword:')) {
+    return `關鍵字「${esc(reason.slice(8))}」`;
+  }
+
+  if (reason.startsWith('author:')) {
+    return `作者「${esc(reason.slice(7))}」`;
+  }
+
+  return esc(reason);
 }
 
 function esc(s: string): string {
