@@ -2,6 +2,7 @@ name = "ptt-alertor"
 main = "src/index.ts"
 compatibility_date = "2025-01-15"
 compatibility_flags = ["nodejs_compat"]
+keep_vars = true
 
 # every minute — runs the PTT board sweep
 [triggers]
