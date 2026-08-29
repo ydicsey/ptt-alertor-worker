@@ -31,6 +31,7 @@ import type { InlineButton } from '../telegram/api';
 // Telegram caps inline keyboards (~100 buttons); keep the removal menu well
 // under that. A user with more subs than this can delete in waves or by text.
 const REMOVE_MENU_MAX = 50;
+const UI_TIMEOUT_SECONDS = 60;
 
 function isTelegramUserAllowed(env: Env, userId: number | undefined): boolean {
   if (userId === undefined || !env.TELEGRAM_ALLOWED_USER_IDS) {
@@ -207,6 +208,28 @@ async function startGuide(
   await sendForceReplyPrompt(env, chatId, action, target);
 }
 
+async function scheduleUiCleanup(
+  env: Env,
+  chatId: string,
+  messageIds: number[],
+  delaySeconds = UI_TIMEOUT_SECONDS,
+): Promise<void> {
+  if (messageIds.length === 0) {
+    return;
+  }
+
+  await env.UI_CLEANUP_QUEUE.send(
+    {
+      type: 'telegram_cleanup',
+      chatId,
+      messageIds,
+    },
+    {
+      delaySeconds,
+    },
+  );
+}
+
 async function sendForceReplyPrompt(
   env: Env,
   chatId: string,
@@ -214,12 +237,38 @@ async function sendForceReplyPrompt(
   target: GuideTarget,
 ): Promise<void> {
   const title = guidePromptTitle(action, target);
-  const itemWord = target === 'keyword' ? '關鍵字' : '作者 ID';
-  const example = target === 'keyword' ? 'Stock 台積電' : 'Stock someuser';
-  const text = `${title}\n回覆此訊息並輸入：<板名> <${itemWord}>\n例如：${example}`;
-  await sendMessage(env, chatId, text, {
-    replyMarkup: { force_reply: true, input_field_placeholder: example },
-  });
+  const itemWord =
+    target === 'keyword' ? '關鍵字' : '作者 ID';
+
+  const example =
+    target === 'keyword'
+      ? 'Stock 台積電'
+      : 'Stock someuser';
+
+  const text = [
+    title,
+    `請在 ${UI_TIMEOUT_SECONDS} 秒內回覆：`,
+    `<板名> <${itemWord}>`,
+    `例如：${example}`,
+  ].join('\n');
+
+  const sent = await sendMessage(
+    env,
+    chatId,
+    text,
+    {
+      replyMarkup: {
+        force_reply: true,
+        input_field_placeholder: example,
+      },
+    },
+  );
+
+  await scheduleUiCleanup(
+    env,
+    chatId,
+    [sent.message_id],
+  );
 }
 
 // --- Tap-to-delete removal menu -------------------------------------------
