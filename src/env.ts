@@ -34,7 +34,7 @@ export interface NotifyPayload {
   title: string;
   author: string;
   url: string;
-  matchReason: string;
+  matchReason: string[];
 }
 
 export interface DispatchEvent {
