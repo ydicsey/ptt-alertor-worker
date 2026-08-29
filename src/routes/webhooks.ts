@@ -28,6 +28,19 @@ import type { InlineButton } from '../telegram/api';
 // under that. A user with more subs than this can delete in waves or by text.
 const REMOVE_MENU_MAX = 50;
 
+function isTelegramUserAllowed(env: Env, userId: number | undefined): boolean {
+  if (userId === undefined || !env.TELEGRAM_ALLOWED_USER_IDS) {
+    return false;
+  }
+
+  const allowedIds = env.TELEGRAM_ALLOWED_USER_IDS
+    .split(',')
+    .map((id) => id.trim())
+    .filter(Boolean);
+
+  return allowedIds.includes(String(userId));
+}
+
 interface TelegramMessage {
   chat: { id: number };
   text?: string;
@@ -62,6 +75,15 @@ webhooks.post('/telegram', async (c) => {
   }
 
   const update = await c.req.json<TelegramUpdate>();
+
+  const telegramUserId =
+  update.callback_query?.from.id ??
+  update.message?.from?.id;
+
+  if (!isTelegramUserAllowed(c.env, telegramUserId)) {
+    console.warn('Blocked unauthorized Telegram user', telegramUserId);
+    return c.json({ ok: true });
+  }
 
   if (update.callback_query) {
     await handleCallback(c.env, update.callback_query);
