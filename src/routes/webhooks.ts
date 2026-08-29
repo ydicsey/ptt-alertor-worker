@@ -533,8 +533,6 @@ async function handleCallback(env: Env, cq: TelegramCallbackQuery): Promise<void
     }
   }
   
-  // Tap-to-delete from the removal menu.
-  const removal = data ? parseRemoveCallback(data) : null;
 const removal = data
   ? parseRemoveCallback(data)
   : null;
