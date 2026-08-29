@@ -68,6 +68,9 @@ export function parseBoardIndex(baseUrl: string, board: string, html: string): S
     }
     const id = idMatch[1] ?? '';
 
+    const boardMatch = href.match(/^\/bbs\/([^/]+)\//);
+    const canonicalBoard = boardMatch?.[1] ?? board;
+
     const authorMatch = block.match(/<div class="author">([^<]*)<\/div>/);
     const author = (authorMatch?.[1] ?? '').trim();
 
@@ -76,7 +79,7 @@ export function parseBoardIndex(baseUrl: string, board: string, html: string): S
 
     out.push({
       id,
-      board,
+      board: canonicalBoard,
       title,
       author,
       url: `${baseUrl}${href}`,
