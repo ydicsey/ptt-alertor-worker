@@ -202,9 +202,7 @@ export async function applyCommand(
     
       return lines.join('\n');
     }
-
-      return `已取消 ${cmd.board} 作者:${cmd.items.join(', ')}${truncationNote(cmd.truncated)}`;
-
+      
     case 'guide':
     case 'remove_menu':
       // The webhook intercepts guide/remove_menu to drive the interactive
