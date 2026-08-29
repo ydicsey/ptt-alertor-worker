@@ -33,7 +33,33 @@ export async function handleArticleBatch(
 }
 
 async function findMatches(env: Env, evt: ArticleEvent): Promise<DispatchEvent[]> {
-  const out: DispatchEvent[] = [];
+  const matches = new Map<
+    string,
+    {
+      binding: BindingRow;
+      reasons: Set<string>;
+    }
+  >();
+
+  const addMatch = (binding: BindingRow, reason: string) => {
+    // One notification per user + delivery channel + destination.
+    const key = JSON.stringify([
+      binding.user_id,
+      binding.channel,
+      binding.external_id,
+    ]);
+
+    let entry = matches.get(key);
+    if (!entry) {
+      entry = {
+        binding,
+        reasons: new Set<string>(),
+      };
+      matches.set(key, entry);
+    }
+
+    entry.reasons.add(reason);
+  };
 
   const kwRows = await env.DB.prepare(
     `SELECT ks.user_id, ks.keyword, cb.channel, cb.external_id
@@ -44,9 +70,10 @@ async function findMatches(env: Env, evt: ArticleEvent): Promise<DispatchEvent[]
   ).bind(evt.board).all<BindingRow & { keyword: string }>();
 
   const titleLower = evt.title.toLowerCase();
+
   for (const r of kwRows.results) {
     if (matchesKeyword(titleLower, r.keyword)) {
-      out.push(toDispatch(r, evt, `keyword:${r.keyword}`));
+      addMatch(r, `keyword:${r.keyword}`);
     }
   }
 
@@ -59,12 +86,13 @@ async function findMatches(env: Env, evt: ArticleEvent): Promise<DispatchEvent[]
   ).bind(evt.board, evt.author).all<BindingRow>();
 
   for (const r of auRows.results) {
-    out.push(toDispatch(r, evt, `author:${evt.author}`));
+    addMatch(r, `author:${evt.author}`);
   }
 
-  return out;
+  return Array.from(matches.values()).map(({ binding, reasons }) =>
+    toDispatch(binding, evt, Array.from(reasons)),
+  );
 }
-
 // A keyword may carry space-separated AND terms ("台積電 漲停"): every term must
 // appear in the (already lower-cased) title to count as a match. Multiple
 // keywords on the same board are independent rows, so they act as OR. The
@@ -74,7 +102,11 @@ export function matchesKeyword(titleLower: string, keyword: string): boolean {
   return terms.length > 0 && terms.every((term) => titleLower.includes(term));
 }
 
-function toDispatch(r: BindingRow, evt: ArticleEvent, reason: string): DispatchEvent {
+function toDispatch(
+  r: BindingRow,
+  evt: ArticleEvent,
+  reasons: string[],
+): DispatchEvent {
   return {
     type: 'notify',
     userId: r.user_id,
@@ -86,7 +118,7 @@ function toDispatch(r: BindingRow, evt: ArticleEvent, reason: string): DispatchE
       title: evt.title,
       author: evt.author,
       url: evt.url,
-      matchReason: reason,
+      matchReasons: reasons,
     },
   };
 }
