@@ -48,6 +48,12 @@ async function checkBoard(env: Env, board: string): Promise<void> {
     ).bind(...ids).all<{ id: string }>();
     const known = new Set(existing.results.map((r) => r.id));
 
+    const checkedAt = Date.now();
+
+    await env.DB.prepare(
+      `UPDATE boards SET last_checked_at = ? WHERE name = ?`,
+    ).bind(checkedAt, board).run();
+    
     const fresh = articles.filter((a) => !known.has(a.id));
     const head = fresh[0];
     if (head) {
@@ -63,8 +69,8 @@ async function checkBoard(env: Env, board: string): Promise<void> {
       await env.DB.batch(inserts);
 
       await env.DB.prepare(
-        `UPDATE boards SET last_article_id = ?, last_checked_at = ? WHERE name = ?`,
-      ).bind(head.id, now, board).run();
+        `UPDATE boards SET last_article_id = ? WHERE name = ?`,
+      ).bind(head.id, board).run();
 
       for (const a of fresh) {
         toEnqueue.push({
