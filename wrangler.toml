@@ -6,9 +6,13 @@ keep_vars = true
 
 [observability]
 enabled = true
-head_sampling_rate = 1
 
-# every minute — runs the PTT board sweep
+[observability.logs]
+enabled = true
+invocation_logs = true
+head_sampling_rate = 1
+persist = true
+
 [triggers]
 crons = ["* * * * *"]
 
