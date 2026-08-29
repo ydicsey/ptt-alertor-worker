@@ -1,7 +1,7 @@
 import type { Env, Channel } from '../env';
 import type { Command } from './parser';
 import { MAX_ITEMS_PER_COMMAND } from './parser';
-import { fetchBoardIndex } from '../crawler/ptt';
+import { fetchBoardSnapshot } from '../crawler/ptt';
 
 export async function ensureUserAndBinding(
   env: Env,
@@ -270,9 +270,9 @@ async function prepareBoardForSubscription(
   // prefer it for the fetch. Otherwise try exactly what the user entered.
   const fetchName = knownBoard?.name ?? requestedName;
 
-  let articles;
+  let snapshot;
   try {
-    articles = await fetchBoardIndex(env, fetchName);
+    snapshot = await fetchBoardSnapshot(env, fetchName);
   } catch (err) {
     console.warn(
       `subscription: unable to fetch board=${requestedName}`,
@@ -280,16 +280,9 @@ async function prepareBoardForSubscription(
     );
     return null;
   }
-
-  // ptt.ts extracts the canonical board name from article hrefs such as:
-  // /bbs/Stock/M.xxxxx.html
-  //
-  // If the board currently has zero visible articles, fall back to a
-  // previously known canonical spelling, then finally the supplied spelling.
-  const canonicalName =
-    articles[0]?.board ??
-    knownBoard?.name ??
-    requestedName;
+  
+  const articles = snapshot.articles;
+  const canonicalName = snapshot.board;
 
   const now = Date.now();
   const lastArticleId = articles[0]?.id ?? null;
