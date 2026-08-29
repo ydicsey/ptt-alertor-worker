@@ -36,7 +36,9 @@ export async function applyCommand(env: Env, userId: string, cmd: Command): Prom
       return formatList(env, userId);
     case 'subscribe_keyword':
       if (cmd.items.length === 0) return '沒有可訂閱的關鍵字。';
-      await ensureBoard(env, cmd.board);
+      if (!(await prepareBoardForSubscription(env, cmd.board))) {
+        return `無法存取 PTT 看板 ${cmd.board}，請確認板名是否正確或稍後再試。`;
+      }
       await env.DB.batch(
         cmd.items.map((k) =>
           env.DB.prepare(
@@ -56,9 +58,11 @@ export async function applyCommand(env: Env, userId: string, cmd: Command): Prom
         ),
       );
       return `已取消 ${cmd.board} 關鍵字:${cmd.items.join(', ')}${truncationNote(cmd.truncated)}`;
-    case 'subscribe_author':
-      if (cmd.items.length === 0) return '沒有可訂閱的作者。';
-      await ensureBoard(env, cmd.board);
+      case 'subscribe_author':
+        if (cmd.items.length === 0) return '沒有可訂閱的作者。';
+        if (!(await prepareBoardForSubscription(env, cmd.board))) {
+          return `無法存取 PTT 看板 ${cmd.board}，請確認板名是否正確或稍後再試。`;
+        }
       await env.DB.batch(
         cmd.items.map((a) =>
           env.DB.prepare(
@@ -141,11 +145,85 @@ function truncationNote(truncated: boolean | undefined): string {
   return truncated ? `（已忽略超過 ${MAX_ITEMS_PER_COMMAND} 個的部分）` : '';
 }
 
-async function ensureBoard(env: Env, name: string): Promise<void> {
-  await env.DB.prepare(
-    `INSERT INTO boards (name, last_checked_at) VALUES (?, 0)
-     ON CONFLICT(name) DO NOTHING`,
-  ).bind(name).run();
+async function prepareBoardForSubscription(
+  env: Env,
+  name: string,
+): Promise<boolean> {
+  // If this board already has at least one active subscription, the checker
+  // has been continuously tracking it, so no new baseline is needed.
+  const active = await env.DB.prepare(
+    `SELECT (
+       EXISTS(SELECT 1 FROM keyword_subs WHERE board = ?)
+       OR
+       EXISTS(SELECT 1 FROM author_subs WHERE board = ?)
+     ) AS active`,
+  ).bind(name, name).first<{ active: number }>();
+
+  if (active?.active) {
+    return true;
+  }
+
+  // This is the first active subscription (or a re-subscription after the
+  // board became inactive). Fetch PTT before touching D1 so a typo / 404 does
+  // not create a permanently broken board entry.
+  let articles;
+  try {
+    articles = await fetchBoardIndex(env, name);
+  } catch (err) {
+    console.warn(`subscription: unable to fetch board=${name}`, err);
+    return false;
+  }
+
+  const now = Date.now();
+  const lastArticleId = articles[0]?.id ?? null;
+
+  const statements = [
+    // Create the board, or reset its cursor when re-activating it.
+    env.DB.prepare(
+      `INSERT INTO boards (name, last_article_id, last_checked_at)
+       VALUES (?, ?, ?)
+       ON CONFLICT(name) DO UPDATE SET
+         last_article_id = excluded.last_article_id,
+         last_checked_at = excluded.last_checked_at`,
+    ).bind(name, lastArticleId, now),
+
+    // Anything left pending from a previous active period is history now.
+    // Mark it handled so re-subscribing never replays stale notifications.
+    env.DB.prepare(
+      `UPDATE articles
+       SET enqueued_at = ?
+       WHERE board = ? AND enqueued_at IS NULL`,
+    ).bind(now, name),
+
+    // Treat everything currently visible on index.html as the baseline.
+    // enqueued_at is set immediately, so these rows never enter ARTICLE_QUEUE.
+    ...articles.map((a) =>
+      env.DB.prepare(
+        `INSERT INTO articles
+           (id, board, title, author, url, push_count, created_at, enqueued_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           board = excluded.board,
+           title = excluded.title,
+           author = excluded.author,
+           url = excluded.url,
+           push_count = excluded.push_count,
+           enqueued_at = excluded.enqueued_at`,
+      ).bind(
+        a.id,
+        a.board,
+        a.title,
+        a.author,
+        a.url,
+        a.pushCount,
+        now,
+        now,
+      ),
+    ),
+  ];
+
+  await env.DB.batch(statements);
+  return true;
 }
 
 export async function formatList(env: Env, userId: string): Promise<string> {
