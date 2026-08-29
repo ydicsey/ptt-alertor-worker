@@ -9,8 +9,25 @@ export interface ScrapedArticle {
   pushCount: number;
 }
 
-export async function fetchBoardIndex(env: Env, board: string): Promise<ScrapedArticle[]> {
+export interface BoardIndexResult {
+  board: string;
+  articles: ScrapedArticle[];
+}
+
+export async function fetchBoardIndex(
+  env: Env,
+  board: string,
+): Promise<ScrapedArticle[]> {
+  const result = await fetchBoardSnapshot(env, board);
+  return result.articles;
+}
+
+export async function fetchBoardSnapshot(
+  env: Env,
+  board: string,
+): Promise<BoardIndexResult> {
   const url = `${env.PTT_BASE_URL}/bbs/${encodeURIComponent(board)}/index.html`;
+
   const res = await fetch(url, {
     headers: {
       'User-Agent': env.USER_AGENT,
@@ -18,11 +35,24 @@ export async function fetchBoardIndex(env: Env, board: string): Promise<ScrapedA
     },
     cf: { cacheTtl: 0, cacheEverything: false },
   });
+
   if (!res.ok) {
     throw new Error(`PTT fetch ${board} failed: ${res.status}`);
   }
+
   const html = await res.text();
-  return parseBoardIndex(env.PTT_BASE_URL, board, html);
+
+  const canonicalBoard =
+    extractCanonicalBoardName(html) ?? board;
+
+  return {
+    board: canonicalBoard,
+    articles: parseBoardIndex(
+      env.PTT_BASE_URL,
+      canonicalBoard,
+      html,
+    ),
+  };
 }
 
 export function parseBoardIndex(baseUrl: string, board: string, html: string): ScrapedArticle[] {
@@ -117,6 +147,18 @@ function parsePushCount(s: string): number {
   }
   const n = parseInt(s, 10);
   return Number.isNaN(n) ? 0 : n;
+}
+
+function extractCanonicalBoardName(html: string): string | null {
+  const match = html.match(
+    /<title>\s*看板\s+([^<\s]+)\s+文章列表\s*-\s*批踢踢實業坊\s*<\/title>/i,
+  );
+
+  if (!match?.[1]) {
+    return null;
+  }
+
+  return decodeEntities(match[1].trim());
 }
 
 function decodeEntities(s: string): string {
