@@ -9,6 +9,8 @@ import {
   detectGuidedMode,
   parseGuidedReply,
   guidePromptTitle,
+  buildMainMenuCallback,
+  parseMainMenuCallback,
   type GuideAction,
   type GuideTarget,
 } from '../command/parser';
@@ -19,6 +21,8 @@ import {
   listAuthorSubs,
   deleteKeywordSubByRowid,
   deleteAuthorSubByRowid,
+  formatList,
+  helpText,
   type SubRow,
 } from '../command/apply';
 import { sendMessage, answerCallbackQuery, editMessageText } from '../telegram/api';
@@ -109,6 +113,10 @@ webhooks.post('/telegram', async (c) => {
   }
 
   const cmd = parseCommand(msg.text);
+  if (cmd.kind === 'help') {
+    await renderMainMenu(c.env, chatId);
+    return c.json({ ok: true });
+  }
   if (cmd.kind === 'guide') {
     await startGuide(c.env, chatId, cmd.action, cmd.target);
     return c.json({ ok: true });
@@ -122,6 +130,56 @@ webhooks.post('/telegram', async (c) => {
   await sendMessage(c.env, chatId, reply);
   return c.json({ ok: true });
 });
+
+async function renderMainMenu(
+  env: Env,
+  chatId: string,
+): Promise<void> {
+  await sendMessage(
+    env,
+    chatId,
+    [
+      '🔔 PTT Alertor',
+      '',
+      '追蹤 PTT 新文章，',
+      '符合訂閱條件時自動通知你。',
+      '',
+      '請選擇一個操作 👇',
+    ].join('\n'),
+    {
+      replyMarkup: {
+        inline_keyboard: [
+          [
+            {
+              text: '➕ 新增關鍵字',
+              callback_data: buildMainMenuCallback('add_keyword'),
+            },
+            {
+              text: '👤 新增作者',
+              callback_data: buildMainMenuCallback('add_author'),
+            },
+          ],
+          [
+            {
+              text: '📋 我的訂閱',
+              callback_data: buildMainMenuCallback('list'),
+            },
+            {
+              text: '🗑 管理訂閱',
+              callback_data: buildMainMenuCallback('manage'),
+            },
+          ],
+          [
+            {
+              text: '📖 使用說明',
+              callback_data: buildMainMenuCallback('help'),
+            },
+          ],
+        ],
+      },
+    },
+  );
+}
 
 // Guided subscribe flow, step 1: a bare /add or /addauthor. With no target yet,
 // offer the type as inline buttons; with a target known (/addauthor), jump
@@ -234,6 +292,52 @@ async function handleCallback(env: Env, cq: TelegramCallbackQuery): Promise<void
   const chatId = cq.message ? String(cq.message.chat.id) : String(cq.from.id);
   const data = cq.data;
 
+  const mainMenu = data ? parseMainMenuCallback(data) : null;
+
+  if (mainMenu) {
+    await answerToast(env, cq.id);
+  
+    switch (mainMenu) {
+      case 'add_keyword':
+        await sendForceReplyPrompt(
+          env,
+          chatId,
+          'subscribe',
+          'keyword',
+        );
+        return;
+  
+      case 'add_author':
+        await sendForceReplyPrompt(
+          env,
+          chatId,
+          'subscribe',
+          'author',
+        );
+        return;
+  
+      case 'list': {
+        const userId = await ensureUserAndBinding(
+          env,
+          'telegram',
+          chatId,
+        );
+  
+        const text = await formatList(env, userId);
+        await sendMessage(env, chatId, text);
+        return;
+      }
+  
+      case 'manage':
+        await startGuide(env, chatId, 'unsubscribe');
+        return;
+  
+      case 'help':
+        await sendMessage(env, chatId, helpText());
+        return;
+    }
+  }
+  
   // Tap-to-delete from the removal menu.
   const removal = data ? parseRemoveCallback(data) : null;
   if (removal) {
