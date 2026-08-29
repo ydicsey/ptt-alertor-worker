@@ -1,6 +1,7 @@
 import type { Env, Channel } from '../env';
 import type { Command } from './parser';
 import { MAX_ITEMS_PER_COMMAND } from './parser';
+import { fetchBoardIndex } from '../crawler/ptt';
 
 export async function ensureUserAndBinding(
   env: Env,
