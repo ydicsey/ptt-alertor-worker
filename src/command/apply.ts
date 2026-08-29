@@ -68,46 +68,112 @@ export async function applyCommand(
       return `已訂閱 ${board} 關鍵字:${cmd.items.join(', ')}${truncationNote(cmd.truncated)}`;
     }
 
-    case 'unsubscribe_keyword':
+    case 'unsubscribe_keyword': {
       if (cmd.items.length === 0) {
         return '沒有可取消的關鍵字。';
       }
-
-      await env.DB.batch(
-        cmd.items.map((k) =>
-          env.DB.prepare(
-            `DELETE FROM keyword_subs
-             WHERE user_id = ?
-               AND board COLLATE NOCASE = ?
-               AND keyword = ?`,
-          ).bind(userId, cmd.board, k),
-        ),
+    
+      const placeholders = cmd.items
+        .map(() => '?')
+        .join(', ');
+    
+      const deleted = await env.DB.prepare(
+        `DELETE FROM keyword_subs
+         WHERE user_id = ?
+           AND board COLLATE NOCASE = ?
+           AND keyword IN (${placeholders})
+         RETURNING board, keyword`,
+      )
+        .bind(
+          userId,
+          cmd.board,
+          ...cmd.items,
+        )
+        .all<{
+          board: string;
+          keyword: string;
+        }>();
+    
+      const deletedItems = new Set(
+        deleted.results.map((r) => r.keyword),
       );
+    
+      const lines: string[] = [];
+    
+      for (const row of deleted.results) {
+        lines.push(
+          `✅ 已取消 ${row.board} 關鍵字：${row.keyword}`,
+        );
+      }
+    
+      for (const item of cmd.items) {
+        if (!deletedItems.has(item)) {
+          lines.push(
+            `⚠️ 找不到訂閱：${cmd.board} 關鍵字 ${item}`,
+          );
+        }
+      }
+    
+      const note = truncationNote(cmd.truncated);
+      if (note) {
+        lines.push(note);
+      }
+    
+      return lines.join('\n');
+    }
 
-      return `已取消 ${cmd.board} 關鍵字:${cmd.items.join(', ')}${truncationNote(cmd.truncated)}`;
-
-    case 'subscribe_author': {
+    case 'unsubscribe_author': {
       if (cmd.items.length === 0) {
-        return '沒有可訂閱的作者。';
+        return '沒有可取消的作者。';
       }
-
-      const board = await prepareBoardForSubscription(env, cmd.board);
-
-      if (!board) {
-        return `無法存取 PTT 看板 ${cmd.board}，請確認板名是否正確或稍後再試。`;
-      }
-
-      await env.DB.batch(
-        cmd.items.map((a) =>
-          env.DB.prepare(
-            `INSERT INTO author_subs (user_id, board, author)
-             VALUES (?, ?, ?)
-             ON CONFLICT(user_id, board, author) DO NOTHING`,
-          ).bind(userId, board, a),
-        ),
+    
+      const placeholders = cmd.items
+        .map(() => '?')
+        .join(', ');
+    
+      const deleted = await env.DB.prepare(
+        `DELETE FROM author_subs
+         WHERE user_id = ?
+           AND board COLLATE NOCASE = ?
+           AND author IN (${placeholders})
+         RETURNING board, author`,
+      )
+        .bind(
+          userId,
+          cmd.board,
+          ...cmd.items,
+        )
+        .all<{
+          board: string;
+          author: string;
+        }>();
+    
+      const deletedItems = new Set(
+        deleted.results.map((r) => r.author),
       );
-
-      return `已訂閱 ${board} 作者:${cmd.items.join(', ')}${truncationNote(cmd.truncated)}`;
+    
+      const lines: string[] = [];
+    
+      for (const row of deleted.results) {
+        lines.push(
+          `✅ 已取消 ${row.board} 作者：${row.author}`,
+        );
+      }
+    
+      for (const item of cmd.items) {
+        if (!deletedItems.has(item)) {
+          lines.push(
+            `⚠️ 找不到訂閱：${cmd.board} 作者 ${item}`,
+          );
+        }
+      }
+    
+      const note = truncationNote(cmd.truncated);
+      if (note) {
+        lines.push(note);
+      }
+    
+      return lines.join('\n');
     }
 
     case 'unsubscribe_author':
