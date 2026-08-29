@@ -25,7 +25,12 @@ import {
   helpText,
   type SubRow,
 } from '../command/apply';
-import { sendMessage, answerCallbackQuery, editMessageText } from '../telegram/api';
+import {
+  sendMessage,
+  deleteMessages,
+  answerCallbackQuery,
+  editMessageText,
+} from '../telegram/api';
 import type { InlineButton } from '../telegram/api';
 
 // Telegram caps inline keyboards (~100 buttons); keep the removal menu well
@@ -47,10 +52,17 @@ function isTelegramUserAllowed(env: Env, userId: number | undefined): boolean {
 }
 
 interface TelegramMessage {
+  message_id: number;
+  date: number;
   chat: { id: number };
   text?: string;
   from?: { id: number; username?: string };
-  reply_to_message?: { text?: string };
+
+  reply_to_message?: {
+    message_id: number;
+    date: number;
+    text?: string;
+  };
 }
 
 interface TelegramCallbackQuery {
@@ -104,12 +116,77 @@ webhooks.post('/telegram', async (c) => {
   // Guided two-step flow, step 2: the user replied to one of our force_reply
   // prompts. The mode (subscribe/unsubscribe × keyword/author) is recovered
   // from the prompt text — no server-side conversation state.
-  const promptText = msg.reply_to_message?.text;
-  const mode = promptText ? detectGuidedMode(promptText) : null;
-  if (mode) {
-    const cmd = parseGuidedReply(mode.action, mode.target, msg.text);
-    const reply = await applyCommand(c.env, userId, cmd);
-    await sendMessage(c.env, chatId, reply);
+  const prompt = msg.reply_to_message;
+  const promptText = prompt?.text;
+  const mode = promptText
+    ? detectGuidedMode(promptText)
+    : null;
+  
+  if (mode && prompt) {
+    const ageSeconds =
+      msg.date - prompt.date;
+  
+    // The operation is valid only for 60 seconds from when
+    // the bot created the force-reply prompt.
+    if (ageSeconds > UI_TIMEOUT_SECONDS) {
+      const expired = await sendMessage(
+        c.env,
+        chatId,
+        '⌛ 操作已逾時，請重新操作。',
+      );
+  
+      // Remove both the old prompt and the late reply.
+      await deleteUiMessagesBestEffort(
+        c.env,
+        chatId,
+        [
+          prompt.message_id,
+          msg.message_id,
+        ],
+      );
+  
+      // The timeout notice itself is temporary.
+      await scheduleUiCleanup(
+        c.env,
+        chatId,
+        [expired.message_id],
+        8,
+      );
+  
+      return c.json({ ok: true });
+    }
+  
+    const cmd = parseGuidedReply(
+      mode.action,
+      mode.target,
+      msg.text,
+    );
+  
+    const reply = await applyCommand(
+      c.env,
+      userId,
+      cmd,
+    );
+  
+    // Send the final result first. This is the message we keep.
+    await sendMessage(
+      c.env,
+      chatId,
+      reply,
+    );
+  
+    // Then remove the temporary conversation:
+    //   1. bot prompt
+    //   2. user's reply
+    await deleteUiMessagesBestEffort(
+      c.env,
+      chatId,
+      [
+        prompt.message_id,
+        msg.message_id,
+      ],
+    );
+  
     return c.json({ ok: true });
   }
 
@@ -206,6 +283,31 @@ async function startGuide(
     return;
   }
   await sendForceReplyPrompt(env, chatId, action, target);
+}
+
+async function deleteUiMessagesBestEffort(
+  env: Env,
+  chatId: string,
+  messageIds: number[],
+): Promise<void> {
+  if (messageIds.length === 0) {
+    return;
+  }
+
+  try {
+    await deleteMessages(
+      env,
+      chatId,
+      messageIds,
+    );
+  } catch (err) {
+    // UI cleanup failure must never make Telegram retry the whole webhook,
+    // because the subscription/database operation may already have succeeded.
+    console.warn(
+      'telegram UI immediate cleanup failed',
+      err,
+    );
+  }
 }
 
 async function scheduleUiCleanup(
