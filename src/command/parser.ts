@@ -225,3 +225,28 @@ export function parseRemoveCallback(
     rowid: Number(m[2]),
   };
 }
+
+export type MainMenuAction =
+  | 'add_keyword'
+  | 'add_author'
+  | 'list'
+  | 'manage'
+  | 'help';
+
+export function buildMainMenuCallback(action: MainMenuAction): string {
+  return `m:${action}`;
+}
+
+export function parseMainMenuCallback(
+  data: string,
+): MainMenuAction | null {
+  const m = data.match(
+    /^m:(add_keyword|add_author|list|manage|help)$/,
+  );
+
+  if (!m?.[1]) {
+    return null;
+  }
+
+  return m[1] as MainMenuAction;
+}
