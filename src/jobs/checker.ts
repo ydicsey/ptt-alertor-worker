@@ -3,6 +3,7 @@ import { fetchBoardIndex } from '../crawler/ptt';
 
 const PER_BOARD_DELAY_MS = 250;
 const PER_BOARD_DELAY_OFF_PEAK_MS = 500;
+const ENQUEUE_BATCH_SIZE = 50;
 
 export async function runChecker(env: Env): Promise<void> {
   const boards = await loadBoards(env);
@@ -78,26 +79,33 @@ async function checkBoard(env: Env, board: string): Promise<void> {
   }
 
   if (toEnqueue.length === 0) return;
-
-  await env.ARTICLE_QUEUE.sendBatch(
-    toEnqueue.map((a) => ({
-      body: {
-        type: 'new_article' as const,
-        board: a.board,
-        articleId: a.id,
-        title: a.title,
-        author: a.author,
-        url: a.url,
-      } satisfies ArticleEvent,
-    })),
-  );
-
-  const enqueuedAt = Date.now();
-  const enqueuedIds = toEnqueue.map((a) => a.id);
-  const ph = enqueuedIds.map(() => '?').join(',');
-  await env.DB.prepare(
-    `UPDATE articles SET enqueued_at = ? WHERE id IN (${ph})`,
-  ).bind(enqueuedAt, ...enqueuedIds).run();
+  
+  for (let i = 0; i < toEnqueue.length; i += ENQUEUE_BATCH_SIZE) {
+    const chunk = toEnqueue.slice(i, i + ENQUEUE_BATCH_SIZE);
+  
+    await env.ARTICLE_QUEUE.sendBatch(
+      chunk.map((a) => ({
+        body: {
+          type: 'new_article' as const,
+          board: a.board,
+          articleId: a.id,
+          title: a.title,
+          author: a.author,
+          url: a.url,
+        } satisfies ArticleEvent,
+      })),
+    );
+  
+    // Mark only this successfully-enqueued chunk as handled.
+    // If a later chunk fails, it stays NULL and the next checker run recovers it.
+    const enqueuedAt = Date.now();
+    const enqueuedIds = chunk.map((a) => a.id);
+    const ph = enqueuedIds.map(() => '?').join(',');
+  
+    await env.DB.prepare(
+      `UPDATE articles SET enqueued_at = ? WHERE id IN (${ph})`,
+    ).bind(enqueuedAt, ...enqueuedIds).run();
+  }
 }
 
 async function loadBoards(env: Env): Promise<{ name: string }[]> {
