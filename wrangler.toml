@@ -37,6 +37,18 @@ max_batch_timeout = 5
 max_retries = 5
 dead_letter_queue = "ptt-dlq"
 
+# Telegram temporary UI messages: delayed cleanup
+[[queues.producers]]
+binding = "UI_CLEANUP_QUEUE"
+queue = "ptt-ui-cleanup"
+
+[[queues.consumers]]
+queue = "ptt-ui-cleanup"
+max_batch_size = 20
+max_batch_timeout = 5
+max_retries = 2
+dead_letter_queue = "ptt-dlq"
+
 [vars]
 PTT_BASE_URL = "https://www.ptt.cc"
 USER_AGENT = "Mozilla/5.0 (compatible; PttAlertor/2.0; +https://github.com/Ptt-Alertor)"
