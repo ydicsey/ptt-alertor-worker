@@ -68,7 +68,11 @@ interface TelegramMessage {
 interface TelegramCallbackQuery {
   id: string;
   data?: string;
-  message?: { chat: { id: number }; message_id: number };
+  message?: {
+    chat: { id: number };
+    message_id: number;
+    date: number;
+  };
   from: { id: number };
 }
 
@@ -270,16 +274,40 @@ async function startGuide(
 ): Promise<void> {
   if (!target) {
     const verb = action === 'subscribe' ? '訂閱' : '取消訂閱';
-    await sendMessage(env, chatId, `要${verb}什麼？`, {
-      replyMarkup: {
-        inline_keyboard: [
-          [
-            { text: '關鍵字', callback_data: buildGuideCallback(action, 'keyword') },
-            { text: '作者', callback_data: buildGuideCallback(action, 'author') },
+    const sent = await sendMessage(
+      env,
+      chatId,
+      `要${verb}什麼？`,
+      {
+        replyMarkup: {
+          inline_keyboard: [
+            [
+              {
+                text: '關鍵字',
+                callback_data: buildGuideCallback(
+                  action,
+                  'keyword',
+                ),
+              },
+              {
+                text: '作者',
+                callback_data: buildGuideCallback(
+                  action,
+                  'author',
+                ),
+              },
+            ],
           ],
-        ],
+        },
       },
-    });
+    );
+    
+    await scheduleUiCleanup(
+      env,
+      chatId,
+      [sent.message_id],
+    );
+    
     return;
   }
   await sendForceReplyPrompt(env, chatId, action, target);
@@ -404,9 +432,25 @@ async function renderRemoveMenu(
     await sendMessage(env, chatId, `目前沒有${word}訂閱可刪除。`);
     return;
   }
-  await sendMessage(env, chatId, removeMenuTitle(target, subs.length), {
-    replyMarkup: { inline_keyboard: buildRemoveKeyboard(target, subs) },
-  });
+  const sent = await sendMessage(
+    env,
+    chatId,
+    removeMenuTitle(target, subs.length),
+    {
+      replyMarkup: {
+        inline_keyboard: buildRemoveKeyboard(
+          target,
+          subs,
+        ),
+      },
+    },
+  );
+  
+  await scheduleUiCleanup(
+    env,
+    chatId,
+    [sent.message_id],
+  );
 }
 
 // Re-renders the removal menu in place after a delete, dropping the tapped row.
@@ -491,28 +535,151 @@ async function handleCallback(env: Env, cq: TelegramCallbackQuery): Promise<void
   
   // Tap-to-delete from the removal menu.
   const removal = data ? parseRemoveCallback(data) : null;
+const removal = data
+  ? parseRemoveCallback(data)
+  : null;
+
   if (removal) {
-    const userId = await ensureUserAndBinding(env, 'telegram', chatId);
+    if (!cq.message) {
+      await answerToast(
+        env,
+        cq.id,
+        '找不到操作訊息，請重新操作。',
+      );
+      return;
+    }
+  
+    const ageSeconds =
+      Math.floor(Date.now() / 1000) -
+      cq.message.date;
+  
+    if (ageSeconds > UI_TIMEOUT_SECONDS) {
+      await answerToast(
+        env,
+        cq.id,
+        '⌛ 操作已逾時，請重新操作。',
+      );
+  
+      await deleteUiMessagesBestEffort(
+        env,
+        chatId,
+        [cq.message.message_id],
+      );
+  
+      return;
+    }
+  
+    const userId = await ensureUserAndBinding(
+      env,
+      'telegram',
+      chatId,
+    );
+  
     const deleted =
       removal.target === 'keyword'
-        ? await deleteKeywordSubByRowid(env, userId, removal.rowid)
-        : await deleteAuthorSubByRowid(env, userId, removal.rowid);
-    await answerToast(
-      env,
-      cq.id,
-      deleted ? `已取消 ${deleted.board}:${deleted.value}` : '已刪除或不存在',
-    );
-    if (cq.message) {
-      await rerenderRemoveMenu(env, chatId, cq.message.message_id, userId, removal.target);
+        ? await deleteKeywordSubByRowid(
+            env,
+            userId,
+            removal.rowid,
+          )
+        : await deleteAuthorSubByRowid(
+            env,
+            userId,
+            removal.rowid,
+          );
+  
+    await answerToast(env, cq.id);
+  
+    if (deleted) {
+      const word =
+        removal.target === 'keyword'
+          ? '關鍵字'
+          : '作者';
+  
+      // Keep only the final successful result.
+      await sendMessage(
+        env,
+        chatId,
+        `✅ 已取消 ${deleted.board} ${word}：${deleted.value}`,
+      );
     }
+  
+    // Remove the temporary deletion menu immediately.
+    await deleteUiMessagesBestEffort(
+      env,
+      chatId,
+      [cq.message.message_id],
+    );
+  
     return;
   }
 
-  // Guided subscribe type picker.
+  const guide = data
+    ? parseGuideCallback(data)
+    : null;
+  
+  if (!guide) {
+    await answerToast(env, cq.id);
+    return;
+  }
+  
+  if (cq.message) {
+    const ageSeconds =
+      Math.floor(Date.now() / 1000) -
+      cq.message.date;
+  
+    if (ageSeconds > UI_TIMEOUT_SECONDS) {
+      await answerToast(
+        env,
+        cq.id,
+        '⌛ 操作已逾時，請重新操作。',
+      );
+  
+      await deleteUiMessagesBestEffort(
+        env,
+        chatId,
+        [cq.message.message_id],
+      );
+  
+      return;
+    }
+  }
+  
   await answerToast(env, cq.id);
-  const guide = data ? parseGuideCallback(data) : null;
-  if (!guide) return;
-  await sendForceReplyPrompt(env, chatId, guide.action, guide.target);
+
+  // The type-selection message is temporary; remove it as soon
+  // as the user chooses keyword/author.
+  if (cq.message) {
+    await deleteUiMessagesBestEffort(
+      env,
+      chatId,
+      [cq.message.message_id],
+    );
+  }
+  
+  if (guide.action === 'unsubscribe') {
+    const userId = await ensureUserAndBinding(
+      env,
+      'telegram',
+      chatId,
+    );
+  
+    await renderRemoveMenu(
+      env,
+      chatId,
+      userId,
+      guide.target,
+    );
+  
+    return;
+  }
+  
+  await sendForceReplyPrompt(
+    env,
+    chatId,
+    guide.action,
+    guide.target,
+  );
 }
 
 webhooks.post('/line', async (c) => {
