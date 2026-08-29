@@ -122,6 +122,33 @@ export async function applyCommand(
       return lines.join('\n');
     }
 
+    case 'subscribe_author': {
+      if (cmd.items.length === 0) {
+        return '沒有可訂閱的作者。';
+      }
+    
+      const board = await prepareBoardForSubscription(
+        env,
+        cmd.board,
+      );
+    
+      if (!board) {
+        return `無法存取 PTT 看板 ${cmd.board}，請確認板名是否正確或稍後再試。`;
+      }
+    
+      await env.DB.batch(
+        cmd.items.map((a) =>
+          env.DB.prepare(
+            `INSERT INTO author_subs (user_id, board, author)
+             VALUES (?, ?, ?)
+             ON CONFLICT(user_id, board, author) DO NOTHING`,
+          ).bind(userId, board, a),
+        ),
+      );
+    
+      return `已訂閱 ${board} 作者:${cmd.items.join(', ')}${truncationNote(cmd.truncated)}`;
+    }
+    
     case 'unsubscribe_author': {
       if (cmd.items.length === 0) {
         return '沒有可取消的作者。';
@@ -175,22 +202,6 @@ export async function applyCommand(
     
       return lines.join('\n');
     }
-
-    case 'unsubscribe_author':
-      if (cmd.items.length === 0) {
-        return '沒有可取消的作者。';
-      }
-
-      await env.DB.batch(
-        cmd.items.map((a) =>
-          env.DB.prepare(
-            `DELETE FROM author_subs
-             WHERE user_id = ?
-               AND board COLLATE NOCASE = ?
-               AND author = ?`,
-          ).bind(userId, cmd.board, a),
-        ),
-      );
 
       return `已取消 ${cmd.board} 作者:${cmd.items.join(', ')}${truncationNote(cmd.truncated)}`;
 
