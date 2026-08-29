@@ -4,6 +4,7 @@ export interface Env {
   DB: D1Database;
   ARTICLE_QUEUE: Queue<ArticleEvent>;
   DISPATCH_QUEUE: Queue<DispatchEvent>;
+  UI_CLEANUP_QUEUE: Queue<UiCleanupEvent>;
 
   PTT_BASE_URL: string;
   USER_AGENT: string;
@@ -43,4 +44,10 @@ export interface DispatchEvent {
   channel: Channel;
   externalId: string;
   payload: NotifyPayload;
+}
+
+export interface UiCleanupEvent {
+  type: 'telegram_cleanup';
+  chatId: string;
+  messageIds: number[];
 }
