@@ -29,7 +29,6 @@ import {
   sendMessage,
   deleteMessages,
   answerCallbackQuery,
-  editMessageText,
 } from '../telegram/api';
 import type { InlineButton } from '../telegram/api';
 
@@ -451,25 +450,6 @@ async function renderRemoveMenu(
     chatId,
     [sent.message_id],
   );
-}
-
-// Re-renders the removal menu in place after a delete, dropping the tapped row.
-async function rerenderRemoveMenu(
-  env: Env,
-  chatId: string,
-  messageId: number,
-  userId: string,
-  target: GuideTarget,
-): Promise<void> {
-  const subs = await listSubs(env, userId, target);
-  if (subs.length === 0) {
-    const word = target === 'keyword' ? '關鍵字' : '作者';
-    await editMessageText(env, chatId, messageId, `（已無${word}訂閱）`);
-    return;
-  }
-  await editMessageText(env, chatId, messageId, removeMenuTitle(target, subs.length), {
-    inline_keyboard: buildRemoveKeyboard(target, subs),
-  });
 }
 
 async function answerToast(env: Env, callbackQueryId: string, text?: string): Promise<void> {
