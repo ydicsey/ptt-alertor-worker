@@ -10,6 +10,7 @@ export interface Env {
 
   TELEGRAM_BOT_TOKEN: string;
   TELEGRAM_WEBHOOK_SECRET?: string;
+  TELEGRAM_ALLOWED_USER_IDS?: string;
   ADMIN_BASIC_AUTH?: string;
 
   LINE_CHANNEL_TOKEN?: string;
