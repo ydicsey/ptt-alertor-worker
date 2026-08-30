@@ -11,34 +11,68 @@ export async function sendTelegram(env: Env, evt: DispatchEvent): Promise<void> 
 function formatMessage(evt: DispatchEvent): string {
   const { payload } = evt;
 
-  const reasons = payload.matchReasons
-    .map(formatReason)
-    .map((reason) => `• ${reason}`)
-    .join('\n');
+  const matchSummary = formatMatchSummary(
+    payload.matchReasons,
+  );
+
+  const firstLine = [
+    `<b>[${esc(payload.board)}]</b>`,
+    matchSummary,
+  ]
+    .filter(Boolean)
+    .join(' ');
 
   return [
-    `<b>[${esc(payload.board)}]</b>`,
-    `符合：`,
-    reasons,
-    '',
+    firstLine,
     esc(payload.title),
     `— ${esc(payload.author)}`,
     esc(payload.url),
   ].join('\n');
 }
 
-function formatReason(reason: string): string {
-  if (reason.startsWith('keyword:')) {
-    return `關鍵字「${esc(reason.slice(8))}」`;
+function formatMatchSummary(
+  reasons: string[],
+): string {
+  const keywords: string[] = [];
+  const authors: string[] = [];
+  const others: string[] = [];
+
+  for (const reason of reasons) {
+    if (reason.startsWith('keyword:')) {
+      keywords.push(reason.slice(8));
+      continue;
+    }
+
+    if (reason.startsWith('author:')) {
+      authors.push(reason.slice(7));
+      continue;
+    }
+
+    others.push(reason);
   }
 
-  if (reason.startsWith('author:')) {
-    return `作者「${esc(reason.slice(7))}」`;
+  const parts: string[] = [];
+
+  if (keywords.length > 0) {
+    parts.push(
+      `🔎 ${keywords.map(esc).join('・')}`,
+    );
   }
 
-  return esc(reason);
+  if (authors.length > 0) {
+    parts.push(
+      `👤 ${authors.map(esc).join('・')}`,
+    );
+  }
+
+  if (others.length > 0) {
+    parts.push(
+      `🎯 ${others.map(esc).join('・')}`,
+    );
+  }
+
+  return parts.join(' ');
 }
-
 function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
