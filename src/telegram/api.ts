@@ -6,10 +6,9 @@ import { PermanentChannelError } from '../errors';
 // (src/routes/webhooks.ts). Centralises token redaction and the
 // transient-vs-permanent error split so callers don't repeat it.
 
-export interface InlineButton {
-  text: string;
-  callback_data: string;
-}
+export type InlineButton =
+  | { text: string; callback_data: string; url?: never }
+  | { text: string; url: string; callback_data?: never };
 
 export type ReplyMarkup =
   | { inline_keyboard: InlineButton[][] }
@@ -18,7 +17,7 @@ export type ReplyMarkup =
 export interface SendOptions {
   replyMarkup?: ReplyMarkup;
   parseMode?: 'HTML';
-  linkPreviewOptions?: { url: string };
+  linkPreviewOptions?: { url?: string; is_disabled?: boolean };
 }
 
 export interface BotCommand {
