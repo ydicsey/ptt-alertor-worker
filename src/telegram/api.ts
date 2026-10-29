@@ -18,6 +18,7 @@ export type ReplyMarkup =
 export interface SendOptions {
   replyMarkup?: ReplyMarkup;
   parseMode?: 'HTML';
+  linkPreviewOptions?: { url: string };
 }
 
 export interface BotCommand {
@@ -107,6 +108,10 @@ export async function sendMessage(
 
   if (opts.replyMarkup) {
     body.reply_markup = opts.replyMarkup;
+  }
+
+  if (opts.linkPreviewOptions) {
+    body.link_preview_options = opts.linkPreviewOptions;
   }
 
   return callTelegram<TelegramSentMessage>(
