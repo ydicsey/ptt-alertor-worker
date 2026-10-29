@@ -5,7 +5,10 @@ export async function sendTelegram(env: Env, evt: DispatchEvent): Promise<void> 
   // Token redaction and the transient-vs-permanent (PermanentChannelError)
   // error split live in the shared client; dispatcher.ts branches on the
   // error type to decide retry vs ack.
-  await sendMessage(env, evt.externalId, formatMessage(evt), { parseMode: 'HTML' });
+  await sendMessage(env, evt.externalId, formatMessage(evt), {
+    parseMode: 'HTML',
+    linkPreviewOptions: { url: evt.payload.url },
+  });
 }
 
 function formatMessage(evt: DispatchEvent): string {
