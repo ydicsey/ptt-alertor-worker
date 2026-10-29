@@ -8,11 +8,6 @@ export async function sendTelegram(env: Env, evt: DispatchEvent): Promise<void> 
   await sendMessage(env, evt.externalId, formatMessage(evt), {
     parseMode: 'HTML',
     linkPreviewOptions: { is_disabled: true },
-    replyMarkup: {
-      inline_keyboard: [[
-        { text: '🔗 開啟 PTT 文章', url: evt.payload.url },
-      ]],
-    },
   });
 }
 
